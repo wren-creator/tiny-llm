@@ -4,7 +4,9 @@ A from-scratch teaching LLM you can build on a laptop CPU in a few minutes, with
 
 ## Why this exists
 
-Most people's relationship with AI is a text box that produces an answer, with everything before that answer treated as magic. This project is the opposite bet: if you walk someone through actually building a language model, tokenizing text, watching a loss curve fall, fine-tuning it with LoRA, and seeing exactly how few parameters that fine-tune touches, the magic goes away and an understandable mechanism is left in its place. That's the whole goal. Not a useful model, an understandable one.
+Most people's whole relationship with AI is a text box that spits out an answer, with everything before that answer treated as magic. That's a bad way to trust, or fear, anything. So instead of writing another explainer about how LLMs work, this is a thing you run: a real transformer, trained from scratch, on your own machine, in a few minutes.
+
+I don't have a computer science degree. What I've got is twenty five years of hands on keyboards, a decade of that on mainframes, and a habit of learning things by taking them apart instead of waiting to be taught the proper way first. This project is that same habit pointed at LLMs: pop the hood, watch it train, watch a LoRA adapter change its behavior with a tiny fraction of the numbers a full retrain would touch, and understand the thing by building it instead of taking someone's word for how it works. That's sovereignty in the small: not depending on a black box to tell you what it's doing.
 
 Two things are true at once here, and both matter:
 
@@ -72,6 +74,22 @@ app.py          the guided Streamlit walkthrough
 
 Bring your own `.txt` file at either the "bring your data" step (what the base model pretrains on) or the "fine-tune with LoRA" step (what the adapter learns) in the app, or pass `--input` to `data/prepare.py` on the command line. The tokenizer's vocabulary is a fixed set of printable ASCII characters (letters, digits, common punctuation, whitespace), so base text and fine-tune text share one vocabulary even if you swap files between runs. Characters outside that set (accented letters, emoji, non-Latin scripts) are silently dropped, worth knowing before feeding it anything unusual.
 
+## Getting more legible output
+
+Out of the box, sample output looks something like this:
+
+```
+The lighthouse keeevepeper d. The sea se da the skea wa s skeper ir dhe away s ghowawas ways.
+```
+
+That's not broken, that's the honest ceiling of a toy-sized model on a couple thousand characters of text. The good sign to look for isn't fluency, it's real words and phrases from your training text bleeding through ("lighthouse," "keeper," "the sea"), proof the model is actually learning the corpus, not just emitting noise. If you want to push it toward something more readable without pretending this is more than it is, a few honest knobs:
+
+- **Lower temperature and top-k when sampling.** `--temperature 0.6 --top-k 10` (defaults are 0.8/20) trades variety for grammar. More repetitive, more coherent.
+- **More pretraining steps.** Raise the "pretraining steps" slider in the app, or `max_steps` in `configs/tiny_cpu.yaml`, past the 800-step default. The loss curve usually hasn't leveled off yet at that point.
+- **More training text.** The bundled sample story is only a couple thousand characters. A model can't generalize past what it's seen, so a longer corpus (a few short stories concatenated, say) beats a short one every time.
+
+None of that changes the ceiling described above, a model this small was never going to write clean prose. It just moves you closer to that ceiling instead of leaving steps on the table.
+
 ## Scaling this up
 
-See `ROADMAP.md`. Short version: same code, bigger numbers, real compute, eventually a real tokenizer and a real base model. Nothing here gets rewritten to scale up, only reconfigured.
+See `ROADMAP.md`. Short version: same code, bigger numbers, real compute, eventually a real tokenizer and a real base model. Nothing here gets rewritten to scale up, only reconfigured, which was the point of building it this way in the first place.
