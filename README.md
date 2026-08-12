@@ -93,3 +93,7 @@ None of that changes the ceiling described above, a model this small was never g
 ## Scaling this up
 
 See `ROADMAP.md`. Short version: same code, bigger numbers, real compute, eventually a real tokenizer and a real base model. Nothing here gets rewritten to scale up, only reconfigured, which was the point of building it this way in the first place.
+
+## License
+
+GPLv3. See `LICENSE`. If you fork this and change it, that version stays open too, same spirit as the rest of the project.
