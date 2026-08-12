@@ -1,0 +1,21 @@
+# Sized to pretrain in a couple of minutes on a laptop CPU.
+# Scaling up later means raising these numbers (and moving to a GPU) —
+# the code in model/gpt.py and engine/train.py does not change.
+
+model:
+  block_size: 128
+  n_layer: 4
+  n_head: 4
+  n_embd: 128
+  dropout: 0.1
+
+train:
+  max_steps: 800
+  batch_size: 32
+  learning_rate: 0.0003
+  warmup_steps: 100
+  grad_accum_steps: 1
+  eval_interval: 100
+  eval_iters: 20
+  grad_clip: 1.0
+  seed: 1337

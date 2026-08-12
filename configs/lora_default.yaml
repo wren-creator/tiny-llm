@@ -1,0 +1,18 @@
+# Defaults for the LoRA fine-tuning demo step.
+# rank controls how many new numbers get added per adapted layer — the
+# smaller this is relative to the base layer, the more dramatic the
+# trainable-parameter comparison the app shows.
+
+lora:
+  rank: 4
+  alpha: 8.0
+  dropout: 0.0
+  target_modules: [c_attn_q, c_attn_v]
+  max_steps: 300
+  batch_size: 32
+  learning_rate: 0.001
+  warmup_steps: 20
+  eval_interval: 50
+  eval_iters: 10
+  grad_clip: 1.0
+  seed: 1337
