@@ -107,6 +107,20 @@ class GPT(nn.Module):
         self.ln_f = nn.LayerNorm(config.n_embd)
         self.head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
+        self.apply(self._init_weights)
+
+    @staticmethod
+    def _init_weights(module: nn.Module) -> None:
+        """Small-normal init, the scheme GPT-2 used. PyTorch's default for
+        nn.Embedding is N(0, 1), which is big enough at this width to make the
+        first few hundred steps noisier than they need to be."""
+        if isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
     def num_trainable_params(self) -> int:
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 

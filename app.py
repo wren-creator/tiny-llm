@@ -103,12 +103,42 @@ if st.session_state.raw_text:
     # -----------------------------------------------------------------------
     st.header("3. Configure the model")
     st.write("Defaults are sized to train on a laptop CPU in a couple of minutes. Feel free to leave them as-is.")
+
+    # Training samples a window of block_size characters out of each split, so the
+    # smaller (validation) split sets a hard ceiling on how much context the model
+    # can be given. Offering sizes this text can't fill would just crash at step 4.
+    smallest_split = min(len(st.session_state.train_ids), len(st.session_state.val_ids))
+    block_choices = [b for b in (32, 64, 128, 256) if b <= smallest_split - 2]
+
+    if not block_choices:
+        st.error(
+            f"This text is too short to train on. After the 90/10 train/validation split the "
+            f"smaller half is only {smallest_split} characters, and the model needs at least 34 "
+            f"to assemble a single batch. Go back to step 1 and use a longer text."
+        )
+        st.stop()
+
     with st.expander("Advanced settings (optional)"):
         n_layer = st.slider("n_layer — how many transformer blocks stacked", 1, 8, 4)
-        n_head = st.slider("n_head — attention heads per block", 1, 8, 4)
         n_embd = st.select_slider("n_embd — width of the model's internal representation", [32, 64, 128, 256], value=128)
-        block_size = st.select_slider("block_size — how many characters of context it can see", [32, 64, 128, 256], value=128)
+        # Each head gets an equal slice of n_embd, so n_head has to divide it exactly.
+        head_choices = [h for h in range(1, 9) if n_embd % h == 0]
+        n_head = st.select_slider(
+            "n_head — attention heads per block",
+            head_choices,
+            value=4 if 4 in head_choices else head_choices[-1],
+        )
+        block_size = st.select_slider(
+            "block_size — how many characters of context it can see",
+            block_choices,
+            value=128 if 128 in block_choices else block_choices[-1],
+        )
         max_steps = st.slider("pretraining steps", 100, 3000, 800, step=100)
+        if block_choices != [32, 64, 128, 256]:
+            st.caption(
+                f"Longer context sizes are hidden because this text can't fill them — the "
+                f"validation split is only {len(st.session_state.val_ids)} characters."
+            )
 
     # -----------------------------------------------------------------------
     # 4. Pretrain
@@ -118,7 +148,10 @@ if st.session_state.raw_text:
 
     if st.button("Start pretraining", disabled=st.session_state.base_trained):
         model_config = GPTConfig(vocab_size=tokenizer.vocab_size, block_size=block_size, n_layer=n_layer, n_head=n_head, n_embd=n_embd)
-        train_config = TrainConfig(max_steps=max_steps)
+        # Warmup scaled to the run length — the config's fixed 100-step default would
+        # swallow a short run entirely, leaving the learning rate still ramping up at
+        # the last step instead of decaying to a finish.
+        train_config = TrainConfig(max_steps=max_steps, warmup_steps=min(100, max(1, max_steps // 10)))
 
         progress = st.progress(0.0)
         status = st.empty()
@@ -141,6 +174,7 @@ if st.session_state.raw_text:
         st.session_state.base_params = model.num_params()
         st.session_state.base_trained = True
         st.session_state.adapter_trained = False  # any prior adapter no longer matches
+        st.session_state.retrieval_index = None  # chunk size is derived from block_size, so re-index
         st.success(f"Done — a {st.session_state.base_params:,}-parameter model trained from scratch.")
 
     if st.session_state.base_trained:
@@ -268,10 +302,17 @@ if st.session_state.raw_text:
             "counts, weighted down for words that show up everywhere and aren't very informative), and a "
             "query is ranked against every chunk by cosine similarity, the same 'embed things, then find "
             "the nearest ones' idea a production vector database runs, just with an embedding you can "
-            "compute by hand instead of a neural one."
+            "compute by hand instead of a neural one. Chunks are sized to the model's context "
+            "window, since there's no use retrieving more text than the model can read."
         )
+        # Chunks are sized against the model's context window, not picked arbitrarily:
+        # retrieving 400-character chunks to feed a model that can only see 128
+        # characters would mean most of what got retrieved is dropped before the model
+        # ever reads it.
+        context_chars = st.session_state.model_config.block_size
+        chunk_chars = max(32, context_chars // 2)
         if st.session_state.retrieval_index is None:
-            chunks = chunk_text(st.session_state.raw_text)
+            chunks = chunk_text(st.session_state.raw_text, chunk_size=chunk_chars, overlap=chunk_chars // 4)
             st.session_state.retrieval_index = TfidfIndex.build(chunks)
         index = st.session_state.retrieval_index
 
@@ -294,17 +335,26 @@ if st.session_state.raw_text:
         )
         rag_prompt = st.text_input("Prompt", "The lighthouse", key="rag_prompt")
         if st.button("Generate with and without retrieved context", key="gen_rag"):
-            top_chunks = [chunk for chunk, _ in index.search(rag_prompt, top_k=2)]
+            top_chunks = [chunk for chunk, _ in index.search(rag_prompt, top_k=1)]
             augmented_prompt = "\n\n".join(top_chunks + [rag_prompt]) if top_chunks else rag_prompt
 
-            plain_out = generate_text(st.session_state.model, tokenizer, rag_prompt, max_new_tokens=180)
-            augmented_out = generate_text(st.session_state.model, tokenizer, augmented_prompt, max_new_tokens=180)
+            # The model can only ever read the last block_size characters, so show
+            # exactly what survived rather than letting the rest fall off quietly.
+            visible_prompt = augmented_prompt[-context_chars:]
+            dropped = len(augmented_prompt) - len(visible_prompt)
+            with st.expander(f"What the model actually reads ({len(visible_prompt)} of {context_chars} characters of context)"):
+                st.text(visible_prompt)
+                if dropped:
+                    st.caption(f"{dropped} characters fell off the front, past the model's context window.")
+
+            plain_out = generate_text(st.session_state.model, tokenizer, rag_prompt, max_new_tokens=180, include_prompt=False)
+            augmented_out = generate_text(st.session_state.model, tokenizer, augmented_prompt, max_new_tokens=180, include_prompt=False)
             col1, col2 = st.columns(2)
             with col1:
-                st.caption("Prompt alone")
+                st.caption("Prompt alone → generated")
                 st.text_area("Plain output", plain_out, height=160, key="rag_plain_out", label_visibility="collapsed")
             with col2:
-                st.caption("Prompt + retrieved context")
+                st.caption("Prompt + retrieved context → generated")
                 st.text_area("Augmented output", augmented_out, height=160, key="rag_augmented_out", label_visibility="collapsed")
 
 # ---------------------------------------------------------------------------

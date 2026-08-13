@@ -26,14 +26,21 @@ def generate_text(
     temperature: float = 0.8,
     top_k: int | None = 20,
     device: str = "cpu",
+    include_prompt: bool = True,
 ) -> str:
+    """Set include_prompt=False to get back only the newly generated text —
+    useful when the prompt is long enough (e.g. retrieved context stuffed in
+    front of it) that echoing it back would bury the model's actual output."""
     model.eval()
     model.to(device)
 
     ids = tokenizer.encode(prompt) or tokenizer.encode(" ")
     idx = torch.tensor([ids], dtype=torch.long, device=device)
     out = model.generate(idx, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k)
-    return tokenizer.decode(out[0].tolist())
+    out_ids = out[0].tolist()
+    if not include_prompt:
+        out_ids = out_ids[len(ids):]
+    return tokenizer.decode(out_ids)
 
 
 def _cli() -> None:

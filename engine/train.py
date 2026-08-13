@@ -29,6 +29,13 @@ OnStep = Callable[[int, float, float | None], None]
 
 def get_batch(ids: np.ndarray, block_size: int, batch_size: int, device: str) -> tuple[torch.Tensor, torch.Tensor]:
     max_start = len(ids) - block_size - 1
+    if max_start < 1:
+        # Without this the negative bound surfaces as an opaque torch RuntimeError
+        # from randint, which tells nobody what actually went wrong.
+        raise ValueError(
+            f"not enough text: this split has {len(ids)} tokens, but a block_size of "
+            f"{block_size} needs at least {block_size + 2}. Use a longer text, or a smaller block_size."
+        )
     starts = torch.randint(0, max_start, (batch_size,))
     x = torch.stack([torch.from_numpy(ids[s:s + block_size].astype(np.int64)) for s in starts])
     y = torch.stack([torch.from_numpy(ids[s + 1:s + block_size + 1].astype(np.int64)) for s in starts])
@@ -48,7 +55,7 @@ def estimate_loss(model: GPT, ids: np.ndarray, block_size: int, batch_size: int,
 
 
 def lr_at_step(step: int, learning_rate: float, warmup_steps: int, max_steps: int) -> float:
-    if step < warmup_steps:
+    if warmup_steps > 0 and step < warmup_steps:
         return learning_rate * (step + 1) / warmup_steps
     progress = (step - warmup_steps) / max(1, max_steps - warmup_steps)
     return learning_rate * 0.5 * (1 + math.cos(math.pi * min(progress, 1.0)))

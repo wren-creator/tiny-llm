@@ -20,12 +20,15 @@ def get_attention_maps(
     """Returns (tokens, attn).
 
     tokens is the prompt as the model actually saw it (unknown characters
-    dropped, same as tokenizer.encode). attn has shape (n_layer, n_head, T, T):
-    attn[l, h, i, j] is how much token i attends to token j in layer l, head h.
+    dropped, and cropped to the last block_size characters the same way
+    generate() crops, since the model cannot attend past its context window).
+    attn has shape (n_layer, n_head, T, T): attn[l, h, i, j] is how much token
+    i attends to token j in layer l, head h.
     """
     ids = tokenizer.encode(prompt)
     if not ids:
         raise ValueError("prompt contains no characters in the model's vocabulary")
+    ids = ids[-model.config.block_size:]
     tokens = [tokenizer.itos[i] for i in ids]
 
     model.eval()
