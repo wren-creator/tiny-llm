@@ -26,6 +26,16 @@ from engine.sample import generate_text
 from engine.train import train as run_pretrain
 from model.config import GPTConfig, LoRAConfig, TrainConfig
 
+# The default sampling settings (temperature 0.8, top_k 20) are tuned for the
+# base model, which has enough capacity to stay recognizable even with that
+# much randomness. A LoRA adapter is a much smaller amount of new capacity
+# sitting on top of it, so the same randomness swamps whatever the adapter
+# learned — confirmed by hand: the exact same adapted model went from mostly
+# noise at 0.8/20 to reliably spelling "Shift log." at 0.2/3. Every generate
+# button that shows adapter or retrieval output uses this instead.
+READABLE_TEMPERATURE = 0.4
+READABLE_TOP_K = 5
+
 ROOT = Path(__file__).resolve().parent
 SAMPLE_CORPUS = (ROOT / "data" / "raw" / "sample_corpus.txt").read_text()
 FINETUNE_SAMPLE = (ROOT / "data" / "raw" / "finetune_sample.txt").read_text()
@@ -283,9 +293,20 @@ if st.session_state.raw_text:
             st.header("6. Compare")
             st.write("Same prompt, two models: the untouched base model, and the base model with the LoRA adapter layered on top.")
             compare_prompt = st.text_input("Prompt", "The lighthouse", key="compare_prompt")
+            st.caption(
+                "Sampled at a lower temperature than the earlier steps on purpose: LoRA's adapter is a "
+                "tiny amount of new capacity next to the full base model, and the default randomness is "
+                "enough to swamp whatever it learned. Turned down, the style shift is actually visible."
+            )
             if st.button("Generate both", key="gen_compare"):
-                base_out = generate_text(st.session_state.model, tokenizer, compare_prompt, max_new_tokens=180)
-                adapted_out = generate_text(st.session_state.adapted_model, tokenizer, compare_prompt, max_new_tokens=180)
+                base_out = generate_text(
+                    st.session_state.model, tokenizer, compare_prompt,
+                    max_new_tokens=180, temperature=READABLE_TEMPERATURE, top_k=READABLE_TOP_K,
+                )
+                adapted_out = generate_text(
+                    st.session_state.adapted_model, tokenizer, compare_prompt,
+                    max_new_tokens=180, temperature=READABLE_TEMPERATURE, top_k=READABLE_TOP_K,
+                )
                 col1, col2 = st.columns(2)
                 with col1:
                     st.caption("Base model")
@@ -355,19 +376,13 @@ if st.session_state.raw_text:
                 if dropped:
                     st.caption(f"{dropped} characters fell off the front, past the model's context window.")
 
-            # Lower temperature/top_k than the other generation buttons on purpose: at
-            # the default 0.8/20, sampling noise swamps whatever small effect retrieval
-            # has on a model this size. Turned down, the model reliably continues the
-            # actual retrieved passage instead of falling back to its most memorized
-            # line, that grounding is the real, honest effect retrieval has here.
-            rag_temperature, rag_top_k = 0.4, 5
             plain_out = generate_text(
                 st.session_state.model, tokenizer, rag_prompt,
-                max_new_tokens=180, temperature=rag_temperature, top_k=rag_top_k, include_prompt=False,
+                max_new_tokens=180, temperature=READABLE_TEMPERATURE, top_k=READABLE_TOP_K, include_prompt=False,
             )
             augmented_out = generate_text(
                 st.session_state.model, tokenizer, augmented_prompt,
-                max_new_tokens=180, temperature=rag_temperature, top_k=rag_top_k, include_prompt=False,
+                max_new_tokens=180, temperature=READABLE_TEMPERATURE, top_k=READABLE_TOP_K, include_prompt=False,
             )
             col1, col2 = st.columns(2)
             with col1:
