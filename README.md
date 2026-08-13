@@ -34,6 +34,9 @@ The app works out of the box with a bundled sample story and a bundled sample "s
 4. **Pretrain.** Watch the loss curve fall in real time as a randomly-initialized model learns to predict the next character of your text. Try prompting the freshly trained base model when it's done.
 5. **Fine-tune with LoRA.** Pick a second, differently-styled text. Instead of retraining the whole model, LoRA freezes it completely and trains a small set of new low-rank adapter matrices next to a few of its layers. The app shows the actual numbers: in the default run, the base model has 834,560 parameters and the LoRA adapter trains about 8,192 of them, under 1%. That comparison is the entire point of the step.
 6. **Compare.** Same prompt, two outputs side by side: the untouched base model, and the base model with the adapter layered on top. The style shift is visible even at this scale, since the base model's own weights never moved.
+7. **Retrieve, then generate.** A small retrieval-augmented generation (RAG) step: your training text gets split into chunks and indexed by a from-scratch TF-IDF vector database (`engine/retrieval.py`, no external library), a query gets ranked against every chunk by cosine similarity, and the closest chunks get handed to the model as extra context before it generates. The retrieval math is real; whether a model this small can actually make use of the extra context is an open, honestly-stated question, see the caveat in the app.
+
+Along the way, step 4 also has a "Look inside: attention" panel: pick a layer and head and see, as a heatmap, exactly how much each token attended to every earlier token, the actual mechanism inside `CausalSelfAttention` made visible instead of implied.
 
 ## Running it from the command line instead
 
@@ -54,6 +57,9 @@ python -m engine.finetune_lora --checkpoint checkpoints/base.pt --config configs
 # 4. sample from either
 python -m engine.sample --checkpoint checkpoints/base.pt --prompt "The lighthouse"
 python -m engine.sample --checkpoint checkpoints/base.pt --adapter checkpoints/adapter.pt --prompt "The lighthouse"
+
+# 5. search a text file with the from-scratch TF-IDF vector index
+python -m engine.retrieval --input data/raw/sample_corpus.txt --query "lighthouse storm"
 ```
 
 Scripts are run with `python -m` (e.g. `python -m engine.train`, not `python engine/train.py`) so Python can resolve the `model`/`data`/`engine` packages correctly from the project root.
@@ -63,8 +69,9 @@ Scripts are run with `python -m` (e.g. `python -m engine.train`, not `python eng
 ```
 data/           bundled sample texts, prepare.py (text -> token ids)
 model/          tokenizer, the GPT architecture, LoRA, config dataclasses
-engine/         pretrain loop, LoRA fine-tune loop, sampling
+engine/         pretrain loop, LoRA fine-tune loop, sampling, attention extraction, TF-IDF retrieval
 configs/        tiny_cpu.yaml (model/training shape), lora_default.yaml (adapter shape)
+tests/          pytest suite covering the tokenizer, GPT forward pass, LoRA, and retrieval
 app.py          the guided Streamlit walkthrough
 ```
 
@@ -89,6 +96,15 @@ That's not broken, that's the honest ceiling of a toy-sized model on a couple th
 - **More training text.** The bundled sample story is only a couple thousand characters. A model can't generalize past what it's seen, so a longer corpus (a few short stories concatenated, say) beats a short one every time.
 
 None of that changes the ceiling described above, a model this small was never going to write clean prose. It just moves you closer to that ceiling instead of leaving steps on the table.
+
+## Testing
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The suite checks the mechanisms this project's claims rest on, not just that the code runs: the tokenizer's encode/decode roundtrip, the GPT forward pass's output shapes and causal masking (a later token can never change an earlier token's output), attention weights summing to 1 and never looking ahead, LoRA's frozen-base/trainable-adapter split and its zero-init-means-no-behavior-change-yet property, and the TF-IDF retrieval index's ranking and edge cases.
 
 ## Scaling this up
 

@@ -16,8 +16,12 @@ from pathlib import Path
 
 import streamlit as st
 
+import matplotlib.pyplot as plt
+
 from data.prepare import prepare_data
+from engine.attention import get_attention_maps
 from engine.finetune_lora import finetune_lora
+from engine.retrieval import TfidfIndex, chunk_text
 from engine.sample import generate_text
 from engine.train import train as run_pretrain
 from model.config import GPTConfig, LoRAConfig, TrainConfig
@@ -34,6 +38,7 @@ def init_state() -> None:
         raw_text=None, tokenizer=None, train_ids=None, val_ids=None,
         model=None, model_config=None, base_params=None, base_trained=False,
         adapted_model=None, adapter_params=None, adapter_added=None, adapter_trained=False,
+        retrieval_index=None,
     )
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -68,6 +73,7 @@ if st.button("Use this text", disabled=candidate_text is None):
     st.session_state.tokenizer = None  # force re-tokenize if data changes
     st.session_state.base_trained = False
     st.session_state.adapter_trained = False
+    st.session_state.retrieval_index = None  # force re-index if data changes
 
 if st.session_state.raw_text:
     st.success(f"Loaded {len(st.session_state.raw_text):,} characters.")
@@ -143,6 +149,33 @@ if st.session_state.raw_text:
         if st.button("Generate", key="gen_base"):
             output = generate_text(st.session_state.model, tokenizer, base_prompt, max_new_tokens=200)
             st.text_area("Output", output, height=140, key="base_output")
+
+        st.subheader("Look inside: attention")
+        st.write(
+            "This is the mechanism that makes a transformer a transformer: for every token, attention "
+            "decides how much to weigh every earlier token when building that token's representation. "
+            "Pick a layer and head below and see those weights for yourself, one row per token, showing "
+            "what it attended to (it can only look backward and at itself, never ahead, which is why the "
+            "chart is always empty above the diagonal)."
+        )
+        attn_prompt = st.text_input("Prompt to inspect", "The lighthouse keeper", key="attn_prompt")
+        n_layer = st.session_state.model_config.n_layer
+        n_head = st.session_state.model_config.n_head
+        col1, col2 = st.columns(2)
+        attn_layer = col1.selectbox("Layer", list(range(n_layer)), key="attn_layer")
+        attn_head = col2.selectbox("Head", list(range(n_head)), key="attn_head")
+        if st.button("Show attention", key="show_attn"):
+            tokens, attn = get_attention_maps(st.session_state.model, tokenizer, attn_prompt)
+            weights = attn[attn_layer, attn_head].numpy()
+
+            fig, ax = plt.subplots(figsize=(5, 5))
+            ax.imshow(weights, cmap="viridis", vmin=0, vmax=1)
+            ax.set_xticks(range(len(tokens)), tokens)
+            ax.set_yticks(range(len(tokens)), tokens)
+            ax.set_xlabel("attending to")
+            ax.set_ylabel("token")
+            ax.set_title(f"layer {attn_layer}, head {attn_head}")
+            st.pyplot(fig)
 
         # ---------------------------------------------------------------
         # 5. Fine-tune with LoRA
@@ -221,6 +254,58 @@ if st.session_state.raw_text:
                 with col2:
                     st.caption("Base + LoRA adapter")
                     st.text_area("Adapted output", adapted_out, height=160, key="adapted_compare_out", label_visibility="collapsed")
+
+        # ---------------------------------------------------------------
+        # 7. Retrieve, then generate
+        # ---------------------------------------------------------------
+        st.header("7. Retrieve, then generate")
+        st.write(
+            "This is retrieval-augmented generation (RAG): instead of relying only on what the model "
+            "learned during training, pull the most relevant snippets of your source text back out at "
+            "generation time and hand them to the model as extra context. The retrieval half here is a "
+            "small vector database built from scratch (`engine/retrieval.py`), no external library: your "
+            "training text is split into overlapping chunks, each chunk becomes a TF-IDF vector (word "
+            "counts, weighted down for words that show up everywhere and aren't very informative), and a "
+            "query is ranked against every chunk by cosine similarity, the same 'embed things, then find "
+            "the nearest ones' idea a production vector database runs, just with an embedding you can "
+            "compute by hand instead of a neural one."
+        )
+        if st.session_state.retrieval_index is None:
+            chunks = chunk_text(st.session_state.raw_text)
+            st.session_state.retrieval_index = TfidfIndex.build(chunks)
+        index = st.session_state.retrieval_index
+
+        retrieval_query = st.text_input("Search your training text for...", "lighthouse", key="retrieval_query")
+        if st.button("Search", key="retrieval_search"):
+            results = index.search(retrieval_query, top_k=3)
+            if not results:
+                st.info("No chunk shares any words with that query.")
+            else:
+                for chunk, score in results:
+                    st.markdown(f"**similarity {score:.3f}**")
+                    st.text(chunk)
+
+        st.caption(
+            "Worth being honest about: a model this small, trained on a couple thousand characters, has "
+            "very little capacity to actually *use* extra context the way a real assistant would, it may "
+            "just ignore the retrieved text, or fold it in as more raw characters to imitate. The retrieval "
+            "mechanism above is real and correct; whether a model is big enough to make good use of what "
+            "it retrieves is a separate question, one this scale of model can't really answer."
+        )
+        rag_prompt = st.text_input("Prompt", "The lighthouse", key="rag_prompt")
+        if st.button("Generate with and without retrieved context", key="gen_rag"):
+            top_chunks = [chunk for chunk, _ in index.search(rag_prompt, top_k=2)]
+            augmented_prompt = "\n\n".join(top_chunks + [rag_prompt]) if top_chunks else rag_prompt
+
+            plain_out = generate_text(st.session_state.model, tokenizer, rag_prompt, max_new_tokens=180)
+            augmented_out = generate_text(st.session_state.model, tokenizer, augmented_prompt, max_new_tokens=180)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.caption("Prompt alone")
+                st.text_area("Plain output", plain_out, height=160, key="rag_plain_out", label_visibility="collapsed")
+            with col2:
+                st.caption("Prompt + retrieved context")
+                st.text_area("Augmented output", augmented_out, height=160, key="rag_augmented_out", label_visibility="collapsed")
 
 # ---------------------------------------------------------------------------
 # What's next

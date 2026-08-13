@@ -43,7 +43,7 @@ class CausalSelfAttention(nn.Module):
         causal_mask = torch.tril(torch.ones(config.block_size, config.block_size))
         self.register_buffer("causal_mask", causal_mask.view(1, 1, config.block_size, config.block_size))
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, return_attn: bool = False) -> tuple[torch.Tensor, torch.Tensor | None]:
         B, T, C = x.shape
 
         q = self.c_attn_q(x).view(B, T, self.n_head, self.head_dim).transpose(1, 2)
@@ -53,11 +53,14 @@ class CausalSelfAttention(nn.Module):
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(self.head_dim))
         att = att.masked_fill(self.causal_mask[:, :, :T, :T] == 0, float("-inf"))
         att = F.softmax(att, dim=-1)
+        # captured post-softmax, pre-dropout — the actual "how much does token i
+        # attend to token j" weights, before dropout randomly zeroes some of them
+        attn_weights = att.detach() if return_attn else None
         att = self.attn_dropout(att)
 
         out = att @ v
         out = out.transpose(1, 2).contiguous().view(B, T, C)
-        return self.resid_dropout(self.c_proj(out))
+        return self.resid_dropout(self.c_proj(out)), attn_weights
 
 
 class MLP(nn.Module):
@@ -85,10 +88,11 @@ class Block(nn.Module):
         self.ln_2 = nn.LayerNorm(config.n_embd)
         self.mlp = MLP(config)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x + self.attn(self.ln_1(x))
+    def forward(self, x: torch.Tensor, return_attn: bool = False) -> tuple[torch.Tensor, torch.Tensor | None]:
+        attn_out, attn_weights = self.attn(self.ln_1(x), return_attn=return_attn)
+        x = x + attn_out
         x = x + self.mlp(self.ln_2(x))
-        return x
+        return x, attn_weights
 
 
 class GPT(nn.Module):
@@ -109,20 +113,26 @@ class GPT(nn.Module):
     def num_params(self) -> int:
         return sum(p.numel() for p in self.parameters())
 
-    def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None):
+    def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None, return_attn: bool = False):
         B, T = idx.shape
         assert T <= self.config.block_size, "input longer than block_size"
 
         pos = torch.arange(0, T, device=idx.device)
         x = self.drop(self.tok_emb(idx) + self.pos_emb(pos))
+        attn_maps = [] if return_attn else None
         for block in self.blocks:
-            x = block(x)
+            x, attn_weights = block(x, return_attn=return_attn)
+            if return_attn:
+                attn_maps.append(attn_weights)
         x = self.ln_f(x)
         logits = self.head(x)
 
         loss = None
         if targets is not None:
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
+
+        if return_attn:
+            return logits, loss, attn_maps
         return logits, loss
 
     @torch.no_grad()
