@@ -1,32 +1,32 @@
-SHIFT LOG. START OF SHIFT. CHECK POWER. CHECK POWER. POWER OK.
-SHIFT LOG. CHECK BACKUP GENERATOR. GENERATOR OK. FUEL OK.
-SHIFT LOG. CHECK LAMP. LAMP OK. BULB OK. NO REPLACEMENT NEEDED.
-SHIFT LOG. WIND: NORTHEAST. SEA STATE: MODERATE. VISIBILITY: GOOD.
-SHIFT LOG. SHIP SIGHTED 0600. SHIP SIGHTED 1100. SHIP SIGHTED 1730.
-SHIFT LOG. NO INCIDENTS. NO INCIDENTS. NO INCIDENTS.
+Shift log. Start of shift. Check power. Check power. Power ok.
+Shift log. Check backup generator. Generator ok. Fuel ok.
+Shift log. Check lamp. Lamp ok. Bulb ok. No replacement needed.
+Shift log. Wind: northeast. Sea state: moderate. Visibility: good.
+Shift log. Ship sighted 0600. Ship sighted 1100. Ship sighted 1730.
+Shift log. No incidents. No incidents. No incidents.
 
-MAINTENANCE LOG. TASK: TRIM WICK. STATUS: DONE. TIME: 0500.
-MAINTENANCE LOG. TASK: POLISH GLASS. STATUS: DONE. TIME: 0515.
-MAINTENANCE LOG. TASK: CHECK ROTATION MOTOR. STATUS: DONE. TIME: 0530.
-MAINTENANCE LOG. TASK: OIL LEVEL. STATUS: OK. REFILL NOT REQUIRED.
-MAINTENANCE LOG. TASK: LOG BOOK BACKUP. STATUS: DONE. COPIED TO SHELF.
+Maintenance log. Task: trim wick. Status: done. Time: 0500.
+Maintenance log. Task: polish glass. Status: done. Time: 0515.
+Maintenance log. Task: check rotation motor. Status: done. Time: 0530.
+Maintenance log. Task: oil level. Status: ok. Refill not required.
+Maintenance log. Task: log book backup. Status: done. Copied to shelf.
 
-INCIDENT REPORT. NONE FILED THIS WEEK.
-INCIDENT REPORT. NONE FILED THIS WEEK.
-INCIDENT REPORT. STORM 2200. LAMP HELD. GENERATOR HELD. NO DAMAGE.
+Incident report. None filed this week.
+Incident report. None filed this week.
+Incident report. Storm 2200. Lamp held. Generator held. No damage.
 
-END OF SHIFT. HANDOFF TO NEXT KEEPER. LAMP: RUNNING. LOG: UPDATED.
-END OF SHIFT. HANDOFF TO NEXT KEEPER. LAMP: RUNNING. LOG: UPDATED.
-END OF SHIFT. HANDOFF TO NEXT KEEPER. LAMP: RUNNING. LOG: UPDATED.
+End of shift. Handoff to next keeper. Lamp: running. Log: updated.
+End of shift. Handoff to next keeper. Lamp: running. Log: updated.
+End of shift. Handoff to next keeper. Lamp: running. Log: updated.
 
-SHIFT LOG. START OF SHIFT. CHECK POWER. CHECK POWER. POWER OK.
-SHIFT LOG. CHECK BACKUP GENERATOR. GENERATOR OK. FUEL OK.
-SHIFT LOG. WIND: SOUTHWEST. SEA STATE: ROUGH. VISIBILITY: POOR.
-SHIFT LOG. SHIP SIGHTED 0700. NO FURTHER SIGHTINGS.
-SHIFT LOG. NO INCIDENTS. NO INCIDENTS. NO INCIDENTS.
+Shift log. Start of shift. Check power. Check power. Power ok.
+Shift log. Check backup generator. Generator ok. Fuel ok.
+Shift log. Wind: southwest. Sea state: rough. Visibility: poor.
+Shift log. Ship sighted 0700. No further sightings.
+Shift log. No incidents. No incidents. No incidents.
 
-MAINTENANCE LOG. TASK: TRIM WICK. STATUS: DONE. TIME: 0500.
-MAINTENANCE LOG. TASK: CHECK ROTATION MOTOR. STATUS: OK.
-MAINTENANCE LOG. TASK: LOG BOOK BACKUP. STATUS: DONE. COPIED TO SHELF.
+Maintenance log. Task: trim wick. Status: done. Time: 0500.
+Maintenance log. Task: check rotation motor. Status: ok.
+Maintenance log. Task: log book backup. Status: done. Copied to shelf.
 
-END OF SHIFT. HANDOFF TO NEXT KEEPER. LAMP: RUNNING. LOG: UPDATED.
+End of shift. Handoff to next keeper. Lamp: running. Log: updated.
