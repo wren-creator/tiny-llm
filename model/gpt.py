@@ -150,11 +150,51 @@ class GPT(nn.Module):
         return logits, loss
 
     @torch.no_grad()
-    def generate(self, idx: torch.Tensor, max_new_tokens: int, temperature: float = 1.0, top_k: int | None = None):
+    def generate(
+        self,
+        idx: torch.Tensor,
+        max_new_tokens: int,
+        temperature: float = 1.0,
+        top_k: int | None = None,
+        no_repeat_ngram_size: int = 0,
+    ):
+        """no_repeat_ngram_size, if set, bans a next token that would recreate
+        an n-gram seen very recently — the standard fix for the failure mode
+        low-temperature sampling is prone to on a small model: getting stuck
+        looping a short pattern ("ondondond...") instead of producing noise.
+
+        Deliberately only looks a short distance back (a handful of
+        n-gram-widths), not the whole sequence: this project's bundled
+        training texts repeat entire sentences on purpose, 70-90 characters
+        apart, and a global ban would block the model from reproducing that
+        real, learned repetition — the exact "real words and phrases bleeding
+        through" signal the README points to as evidence the model learned
+        something. A short lookback catches immediate, zero-gap loops without
+        touching those far-apart, legitimate repeats.
+
+        Assumes batch size 1, the only way this project calls generate(); a
+        real batched implementation would need a per-sequence n-gram set
+        instead of one shared across the batch.
+        """
+        lookback = no_repeat_ngram_size * 4
         for _ in range(max_new_tokens):
             idx_cond = idx[:, -self.config.block_size:]
             logits, _ = self(idx_cond)
             logits = logits[:, -1, :] / max(temperature, 1e-6)
+
+            if no_repeat_ngram_size and idx.size(1) >= no_repeat_ngram_size:
+                seq = idx[0].tolist()[-lookback:]
+                prefix = tuple(seq[-(no_repeat_ngram_size - 1):]) if no_repeat_ngram_size > 1 else ()
+                banned = {
+                    seq[i + no_repeat_ngram_size - 1]
+                    for i in range(len(seq) - no_repeat_ngram_size + 1)
+                    if tuple(seq[i:i + no_repeat_ngram_size - 1]) == prefix
+                }
+                if banned and len(banned) < logits.size(-1):
+                    # never ban every remaining candidate — that would zero out
+                    # the whole distribution and break softmax/multinomial
+                    logits[:, list(banned)] = float("-inf")
+
             if top_k is not None:
                 v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
                 logits[logits < v[:, [-1]]] = float("-inf")

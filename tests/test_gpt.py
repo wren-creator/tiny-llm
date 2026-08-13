@@ -47,6 +47,39 @@ def test_generate_appends_requested_number_of_tokens():
     assert out.shape == (1, 7)
 
 
+def test_no_repeat_ngram_size_does_not_change_output_length():
+    model = make_model()
+    idx = torch.randint(0, 10, (1, 3))
+    out = model.generate(idx, max_new_tokens=20, no_repeat_ngram_size=3)
+    assert out.shape == (1, 23)
+
+
+def test_no_repeat_ngram_size_breaks_up_greedy_loops():
+    """Near-greedy sampling (very low temperature, top_k=1) is the failure
+    case that motivated this: a small, undertrained model tends to collapse
+    into repeating the same short pattern forever ("ondondond...")."""
+    torch.manual_seed(0)
+    model = make_model(vocab_size=10, block_size=32, n_layer=2, n_head=2, n_embd=16)
+    idx = torch.randint(0, 10, (1, 3))
+    out = model.generate(idx, max_new_tokens=60, temperature=0.01, top_k=1, no_repeat_ngram_size=3)
+    tokens = out[0].tolist()
+    # the same 3-gram must never repeat three times in a row
+    for i in range(len(tokens) - 8):
+        a, b, c = tokens[i:i + 3], tokens[i + 3:i + 6], tokens[i + 6:i + 9]
+        assert not (a == b == c), f"3-gram {a} repeated three times in a row at position {i}"
+
+
+def test_no_repeat_ngram_size_never_bans_every_candidate():
+    """A tiny vocabulary makes it easy to accidentally ban every remaining
+    token, which would zero out the softmax distribution and crash
+    multinomial sampling. Must never happen, however aggressive the ban."""
+    torch.manual_seed(0)
+    model = make_model(vocab_size=3, block_size=16, n_layer=1, n_head=1, n_embd=8)
+    idx = torch.randint(0, 3, (1, 2))
+    out = model.generate(idx, max_new_tokens=30, temperature=0.01, top_k=1, no_repeat_ngram_size=1)
+    assert out.shape == (1, 32)
+
+
 def test_return_attn_shapes():
     model = make_model(n_layer=2, n_head=2)
     idx = torch.randint(0, 10, (1, 5))
