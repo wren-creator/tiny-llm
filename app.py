@@ -235,11 +235,16 @@ if st.session_state.raw_text:
 
         with st.expander("Advanced LoRA settings (optional)"):
             lora_rank = st.slider("rank — width of the adapter", 1, 16, 4)
-            lora_steps = st.slider("fine-tuning steps", 50, 1000, 300, step=50)
+            lora_steps = st.slider("fine-tuning steps", 50, 2000, 1000, step=50)
 
         if st.button("Start LoRA fine-tuning", disabled=ft_text is None):
             ft_train_ids, ft_val_ids, _ = prepare_data(ft_text, tokenizer=tokenizer)
-            lora_config = LoRAConfig(rank=lora_rank, alpha=lora_rank * 2, max_steps=lora_steps)
+            # Warmup scaled to run length, same reasoning as the pretrain step above —
+            # a fixed warmup longer than a short run would never finish ramping up.
+            lora_config = LoRAConfig(
+                rank=lora_rank, alpha=lora_rank * 2, max_steps=lora_steps,
+                warmup_steps=min(100, max(1, lora_steps // 10)),
+            )
 
             progress = st.progress(0.0)
             status = st.empty()
@@ -327,11 +332,14 @@ if st.session_state.raw_text:
                     st.text(chunk)
 
         st.caption(
-            "Worth being honest about: a model this small, trained on a couple thousand characters, has "
-            "very little capacity to actually *use* extra context the way a real assistant would, it may "
-            "just ignore the retrieved text, or fold it in as more raw characters to imitate. The retrieval "
-            "mechanism above is real and correct; whether a model is big enough to make good use of what "
-            "it retrieves is a separate question, one this scale of model can't really answer."
+            "Worth being honest about what \"improves the output\" means at this scale: a model this "
+            "small won't write more fluent English just because it was handed extra context, that ceiling "
+            "is set by the model's size and training, not by retrieval. What retrieval actually changes is "
+            "*what the model talks about*: with no context, it falls back on whatever it saw most often "
+            "during training; with a retrieved chunk in front of the prompt, it tends to continue *that* "
+            "chunk's actual content instead. That effect is easiest to see with low-randomness sampling "
+            "below (temperature and top-k both turned down), since high-randomness sampling mostly just "
+            "adds noise on top of it."
         )
         rag_prompt = st.text_input("Prompt", "The lighthouse", key="rag_prompt")
         if st.button("Generate with and without retrieved context", key="gen_rag"):
@@ -347,8 +355,20 @@ if st.session_state.raw_text:
                 if dropped:
                     st.caption(f"{dropped} characters fell off the front, past the model's context window.")
 
-            plain_out = generate_text(st.session_state.model, tokenizer, rag_prompt, max_new_tokens=180, include_prompt=False)
-            augmented_out = generate_text(st.session_state.model, tokenizer, augmented_prompt, max_new_tokens=180, include_prompt=False)
+            # Lower temperature/top_k than the other generation buttons on purpose: at
+            # the default 0.8/20, sampling noise swamps whatever small effect retrieval
+            # has on a model this size. Turned down, the model reliably continues the
+            # actual retrieved passage instead of falling back to its most memorized
+            # line, that grounding is the real, honest effect retrieval has here.
+            rag_temperature, rag_top_k = 0.4, 5
+            plain_out = generate_text(
+                st.session_state.model, tokenizer, rag_prompt,
+                max_new_tokens=180, temperature=rag_temperature, top_k=rag_top_k, include_prompt=False,
+            )
+            augmented_out = generate_text(
+                st.session_state.model, tokenizer, augmented_prompt,
+                max_new_tokens=180, temperature=rag_temperature, top_k=rag_top_k, include_prompt=False,
+            )
             col1, col2 = st.columns(2)
             with col1:
                 st.caption("Prompt alone → generated")

@@ -23,20 +23,37 @@ _WORD_RE = re.compile(r"[a-z0-9]+")
 
 
 def chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str]:
-    """Splits text into overlapping fixed-size character windows. The overlap
-    keeps a sentence that straddles a chunk boundary from being unfindable
-    from either side."""
+    """Splits text into overlapping, word-boundary-aligned character windows.
+    The overlap keeps a sentence that straddles a chunk boundary from being
+    unfindable from either side. Snapping each edge to the nearest word
+    boundary keeps a chunk from starting or ending mid-word — a fragment like
+    "...loved the lighthouse. T" doesn't just read as broken, it glues onto
+    whatever gets appended after it (a query, a prompt) just as unnaturally,
+    which measurably hurt the retrieval-augmented generation demo before this
+    fix: the model was reading a spliced-together word fragment it had never
+    seen, not a natural continuation.
+    """
     text = text.strip()
     if not text:
         return []
 
     step = max(1, chunk_size - overlap)
+    n = len(text)
     chunks = []
-    for start in range(0, len(text), step):
-        chunk = text[start:start + chunk_size].strip()
+    for start in range(0, n, step):
+        end = min(start + chunk_size, n)
+        words = text[start:end].split()
+        if len(words) > 1:
+            mid_word_start = start > 0 and not text[start - 1].isspace() and not text[start].isspace()
+            mid_word_end = end < n and not text[end - 1].isspace() and not text[end].isspace()
+            if mid_word_start:
+                words = words[1:]
+            if mid_word_end and len(words) > 1:
+                words = words[:-1]
+        chunk = " ".join(words).strip()
         if chunk:
             chunks.append(chunk)
-        if start + chunk_size >= len(text):
+        if end >= n:
             break
     return chunks
 

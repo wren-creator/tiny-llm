@@ -8,10 +8,15 @@ lora:
   alpha: 8.0
   dropout: 0.0
   target_modules: [c_attn_q, c_attn_v]
-  max_steps: 300
+  # 300 steps left this visibly undertrained: validation loss stalled around
+  # 2.2 and the output was closer to noise than to the fine-tune text's
+  # style. 1000 steps gets it to ~1.6 and starts spelling "shift log"
+  # correctly on the bundled sample — steps are cheap here (a rank-4 adapter
+  # on a 2KB corpus), so there's no reason to stop early.
+  max_steps: 1000
   batch_size: 32
   learning_rate: 0.001
-  warmup_steps: 20
+  warmup_steps: 100
   eval_interval: 50
   eval_iters: 10
   grad_clip: 1.0

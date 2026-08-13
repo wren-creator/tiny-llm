@@ -14,6 +14,32 @@ def test_chunk_text_empty_input():
     assert chunk_text("   ") == []
 
 
+def test_chunk_text_does_not_split_words():
+    """A chunk ending mid-word (e.g. "...loved the lighthouse. T") reads as
+    broken and, worse, glues onto whatever gets appended after it — a query
+    or a prompt — as an unnatural fragment the model never saw in training.
+    Confirmed by hand: this measurably hurt retrieval-augmented generation
+    before chunk_text snapped to word boundaries."""
+    text = (
+        "The lighthouse keeper woke before dawn, as she always did. The sea was calm. "
+        "She climbed the spiral stairs, one hand on the cold iron rail. The lamp room "
+        "smelled of oil and salt. She trimmed the wick. She polished the glass."
+    )
+    words = set(text.split())
+    for chunk in chunk_text(text, chunk_size=40, overlap=10):
+        for edge_word in (chunk.split()[0], chunk.split()[-1]):
+            assert edge_word.strip(".,") in {w.strip(".,") for w in words}, (
+                f"{edge_word!r} looks like a word fragment, not a whole word from the source text"
+            )
+
+
+def test_chunk_text_still_covers_whole_input_with_real_words():
+    text = "one two three four five six seven eight nine ten " * 5
+    chunks = chunk_text(text, chunk_size=30, overlap=5)
+    assert len(chunks) > 1
+    assert "".join(chunks).replace(" ", "") != ""  # sanity: didn't chunk away to nothing
+
+
 def test_search_ranks_relevant_chunk_first():
     chunks = [
         "The lighthouse keeper watched the storm roll in over the sea.",

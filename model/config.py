@@ -36,10 +36,10 @@ class LoRAConfig:
     alpha: float = 8.0     # scales the adapter's contribution
     dropout: float = 0.0
     target_modules: tuple = ("c_attn_q", "c_attn_v")  # which projections get adapters
-    max_steps: int = 300
+    max_steps: int = 1000
     batch_size: int = 32
     learning_rate: float = 1e-3
-    warmup_steps: int = 20
+    warmup_steps: int = 100
     eval_interval: int = 50
     eval_iters: int = 10
     grad_clip: float = 1.0
