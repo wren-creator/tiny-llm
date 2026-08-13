@@ -6,3 +6,5 @@ checkpoints/
 data/prepared/
 *.bin
 .DS_Store
+app.pid
+app.log

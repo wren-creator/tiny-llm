@@ -26,6 +26,8 @@ streamlit run app.py
 
 The app works out of the box with a bundled sample story and a bundled sample "shift log" text for the LoRA fine-tuning step, no data of your own required to try it.
 
+Once the venv is set up, `./start.sh` and `./stop.sh` run the app in the background (PID-tracked, logs to `app.log`, default port 8501, override with `PORT=8888 ./start.sh`), handy for leaving it running without tying up a terminal.
+
 ## What the walkthrough covers
 
 1. **Bring your data.** Use the built-in story, or upload your own `.txt` file. A model only knows what's in the text you give it.
